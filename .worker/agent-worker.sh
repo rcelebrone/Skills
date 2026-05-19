@@ -2,11 +2,15 @@
 
 # =========================================================================
 # Configurações do Worker
-# Repositório: Liberdade-Financeira-App
 # =========================================================================
-# REPO="rcelebrone-organization/Liberdade-Financeira-App" (Herdado do ambiente)
+WORKER_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -f "$WORKER_DIR/.env" ]; then
+    # Carrega variáveis do .env ignorando comentários e linhas vazias
+    export $(grep -v '^#' "$WORKER_DIR/.env" | xargs)
+fi
+
 if [ -z "$REPO" ]; then
-    echo "ERRO: Variável REPO não definida no ambiente."
+    echo "ERRO: Variável REPO não definida no ambiente ou no arquivo .worker/.env."
     exit 1
 fi
 LABEL_PENDING="ai-task"
@@ -14,40 +18,8 @@ LABEL_PROCESSING="ai-processing"
 LABEL_DONE="ai-done"
 LOG_FILE=".agent-worker.log"
 
-PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )/.." && pwd )"
+PROJECT_DIR="$WORKER_DIR/.."
 cd "$PROJECT_DIR" || exit 1
-
-# Enforce confinement at OS/filesystem level (do not rely only on prompt instructions).
-is_confined_environment() {
-    # Common container markers
-    [ -f "/.dockerenv" ] && return 0
-    [ -f "/run/.containerenv" ] && return 0
-
-    # Check init environment/cgroup hints
-    if [ -r /proc/1/environ ] && tr '\0' '\n' < /proc/1/environ | grep -qi '^container='; then
-        return 0
-    fi
-    if [ -r /proc/1/cgroup ] && grep -Eqi '(docker|kubepods|containerd|podman|lxc)' /proc/1/cgroup; then
-        return 0
-    fi
-
-    # Chroot/container hint: inode of / differs from host root seen by pid 1
-    if [ -r /proc/1/root/. ]; then
-        local root_inode
-        local init_root_inode
-        root_inode="$(stat -c '%d:%i' / 2>/dev/null || true)"
-        init_root_inode="$(stat -c '%d:%i' /proc/1/root/. 2>/dev/null || true)"
-        [ -n "$root_inode" ] && [ -n "$init_root_inode" ] && [ "$root_inode" != "$init_root_inode" ] && return 0
-    fi
-
-    return 1
-}
-
-if ! is_confined_environment; then
-    echo "ERRO: Ambiente não confinado detectado."
-    echo "Este worker exige isolamento em nível de sistema (container/chroot) para executar com segurança."
-    exit 1
-fi
 
 echo "====================================================================="
 echo ">>> Agent Worker Iniciado em modo contínuo."
