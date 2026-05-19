@@ -76,6 +76,18 @@ claude
 
 ---
 
+## 🤖 Worker Autônomo (Exclusivo Gemini CLI)
+
+O DotAgents inclui um recurso de **Agent Worker** (localizado em `.worker/`) que permite transformar seu repositório em um ambiente de desenvolvimento autônomo. 
+
+**Nota:** Este recurso é projetado especificamente para uso com o **Gemini CLI**. Usuários do Cursor, Antigravity ou Claude Code não conseguirão utilizar este worker, pois ele depende da interface de linha de comando do Gemini para a execução das tarefas.
+
+O worker monitora Issues com a label `ai-task` e utiliza o Gemini CLI para implementar soluções, abrir Pull Requests e fechar as Issues automaticamente.
+
+Para saber como configurar e utilizar o worker em seus projetos, consulte o [Guia do Worker](.worker/README.md).
+
+---
+
 ## 📁 Estrutura
 
 - `agents/`: Definições das personas.
