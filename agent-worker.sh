@@ -2,23 +2,15 @@
 
 # =========================================================================
 # Configurações do Worker
+# Repositório: Nome-Do-Seu-Projeto
 # =========================================================================
-WORKER_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-if [ -f "$WORKER_DIR/.env" ]; then
-    # Carrega variáveis do .env ignorando comentários e linhas vazias
-    export $(grep -v '^#' "$WORKER_DIR/.env" | xargs)
-fi
-
-if [ -z "$REPO" ]; then
-    echo "ERRO: Variável REPO não definida no ambiente ou no arquivo .worker/.env."
-    exit 1
-fi
+REPO="nome-da-sua-org/Nome-Do-Seu-Projeto"
 LABEL_PENDING="ai-task"
 LABEL_PROCESSING="ai-processing"
 LABEL_DONE="ai-done"
 LOG_FILE=".agent-worker.log"
 
-PROJECT_DIR="$WORKER_DIR/.."
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$PROJECT_DIR" || exit 1
 
 echo "====================================================================="
@@ -34,7 +26,7 @@ while true; do
 
     if [ -z "$ISSUE_NUM" ]; then
         # Nenhuma issue encontrada. Dorme 5 segundos e tenta de novo silenciosamente.
-        sleep 60
+        sleep 300
         continue
     fi
 
