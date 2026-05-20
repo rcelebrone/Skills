@@ -25,7 +25,7 @@ while true; do
     ISSUE_NUM=$(echo "$ISSUE_JSON" | jq -r '.[0].number // empty')
 
     if [ -z "$ISSUE_NUM" ]; then
-        # Nenhuma issue encontrada. Dorme 5 segundos e tenta de novo silenciosamente.
+        # Nenhuma issue encontrada. Dorme 5 minutos e tenta de novo silenciosamente.
         sleep 300
         continue
     fi
@@ -96,7 +96,7 @@ Nota: Apenas gere, modifique e salve os arquivos localmente. O sistema empacotad
             
             if [ -n "$UNCOMMITTED_CHANGES" ]; then
                 echo ">>> [Passo 5/6] Alterações detectadas. Commitando e enviando branch..."
-                git add . > /dev/null 2>&1
+                git add -A > /dev/null 2>&1
                 git commit -m "feat: resolve issue #$ISSUE_NUM - $ISSUE_TITLE" > /dev/null 2>&1
             else
                 echo ">>> [Passo 5/6] Commits autônomos da IA detectados. Enviando branch..."
@@ -104,21 +104,43 @@ Nota: Apenas gere, modifique e salve os arquivos localmente. O sistema empacotad
             
             # Tenta o push e verifica se teve sucesso
             if git push --force-with-lease -u origin "$BRANCH_NAME" 2> "$LOG_FILE.git_err"; then
-                echo ">>> [Passo 6/6] Abrindo Pull Request e fechando a Issue..."
-                PR_URL=$(gh pr create --repo "$REPO" \
-                                     --base "main" \
-                                     --head "$BRANCH_NAME" \
-                                     --title "feat: $ISSUE_TITLE (Issue #$ISSUE_NUM)" \
-                                     --body "Pull Request gerado automaticamente pela Squad IA para resolver a **Issue #$ISSUE_NUM**.\n\n### Validação Interna\n- [x] Implementação concluída\n- [x] Arquitetura baseada em \`.gemini/commands/manager.md\`")
+                echo ">>> [Passo 6/6] Verificando e abrindo Pull Request..."
                 
-                if [ $? -eq 0 ]; then
+                # Garante que arquivos temporários não causem avisos de "uncommitted changes"
+                rm -f "$LOG_FILE" "$LOG_FILE.git_err" "$LOG_FILE.pr_err"
+                
+                # Verifica se já existe um PR aberto para esta branch
+                EXISTING_PR=$(gh pr list --repo "$REPO" --head "$BRANCH_NAME" --state open --json url --jq '.[0].url')
+                
+                if [ -n "$EXISTING_PR" ]; then
+                    echo ">>> [AVISO] Pull Request já existe: $EXISTING_PR"
+                    PR_URL=$EXISTING_PR
+                    PR_STATUS=0
+                else
+                    PR_URL=$(gh pr create --repo "$REPO" \
+                                         --base "main" \
+                                         --head "$BRANCH_NAME" \
+                                         --title "feat: $ISSUE_TITLE (Issue #$ISSUE_NUM)" \
+                                         --body "Pull Request gerado automaticamente pela Squad IA.\n\nFixes #$ISSUE_NUM\n\n### Validação Interna\n- [x] Implementação concluída\n- [x] Arquitetura baseada em \`.gemini/commands/manager.md\`" 2> "$LOG_FILE.pr_err")
+                    PR_STATUS=$?
+                fi
+                
+                if [ $PR_STATUS -eq 0 ]; then
                     gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "$LABEL_PROCESSING" --add-label "$LABEL_DONE" > /dev/null 2>&1
                     gh issue close "$ISSUE_NUM" --repo "$REPO" > /dev/null 2>&1
-                    echo ">>> [OK] Sucesso! PR aberto em: $PR_URL"
+                    echo ">>> [OK] Sucesso! PR processado: $PR_URL"
                 else
-                    echo ">>> [ERRO] Falha ao criar Pull Request no GitHub."
-                    # Reverte label para pending para reprocessamento futuro
-                    gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "$LABEL_PROCESSING" --add-label "$LABEL_PENDING" > /dev/null 2>&1
+                    # Caso especial: Se não há commits, não adianta tentar de novo
+                    if grep -q "No commits between" "$LOG_FILE.pr_err"; then
+                        echo ">>> [AVISO] O GitHub informou que não há commits novos para o PR (já integrados ou vazios)."
+                        gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "$LABEL_PROCESSING" --add-label "$LABEL_DONE" > /dev/null 2>&1
+                        gh issue close "$ISSUE_NUM" --repo "$REPO" > /dev/null 2>&1
+                    else
+                        echo ">>> [ERRO] Falha ao criar Pull Request no GitHub."
+                        cat "$LOG_FILE.pr_err"
+                        # Reverte label para pending para reprocessamento futuro apenas em erros reais
+                        gh issue edit "$ISSUE_NUM" --repo "$REPO" --remove-label "$LABEL_PROCESSING" --add-label "$LABEL_PENDING" > /dev/null 2>&1
+                    fi
                 fi
             else
                 echo ">>> [ERRO] Falha ao enviar branch para o remoto (git push)."
